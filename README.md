@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PackFlow
 
-## Getting Started
+Invoicing and margin tracking for packaging box brokers.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router)
+- **PostgreSQL** + **Prisma 6**
+- **NextAuth.js v5** (Auth.js) — credentials + optional Google OAuth
+- **Tailwind CSS 4**
+
+## Getting started
+
+### 1. Environment
+
+```bash
+cp .env.example .env
+```
+
+Set `DATABASE_URL` and `AUTH_SECRET` (generate with `openssl rand -base64 32`).
+
+### 2. Database
+
+```bash
+npm run db:push
+```
+
+Or with migrations:
+
+```bash
+npm run db:migrate
+```
+
+### 3. Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) → **Start free trial** to create a workspace.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run db:push` | Push Prisma schema to DB |
+| `npm run db:migrate` | Create/apply migrations |
+| `npm run db:studio` | Prisma Studio |
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+  (marketing)/     Landing page
+  (auth)/          Login & signup
+  [orgSlug]/       Tenant app (sidebar, dashboard)
+  organizations/   Workspace picker
+auth.ts            NextAuth configuration
+prisma/schema.prisma
+lib/               Prisma client, org context, utilities
+components/        UI kit + layouts
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Documentation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [`docs/SCREEN_ARCHITECTURE.md`](docs/SCREEN_ARCHITECTURE.md)
+- [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md)
+- [`database/schema.sql`](database/schema.sql) — full SQL reference (Phase 1+ tables)
 
-## Deploy on Vercel
+## Phase 0 (current)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [x] Prisma + PostgreSQL
+- [x] NextAuth (email/password signup)
+- [x] Multi-tenant org routing `/{orgSlug}`
+- [x] App shell + sidebar + mobile nav
+- [x] Shared UI components
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Phase 1 adds invoice builder, clients, products, and payments.
