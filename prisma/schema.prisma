@@ -384,32 +384,42 @@ model ProductPriceHistory {
 }
 
 model Invoice {
-  id                   String        @id @default(uuid()) @db.Uuid
-  organizationId       String        @map("organization_id") @db.Uuid
-  customerId           String?       @map("customer_id") @db.Uuid
-  invoiceNumber        String?       @map("invoice_number")
-  status               InvoiceStatus @default(draft)
-  invoiceDate          DateTime?     @map("invoice_date") @db.Date
-  dueDate              DateTime?     @map("due_date") @db.Date
-  issuedAt             DateTime?     @map("issued_at")
-  grandTotalCents      BigInt        @default(0) @map("grand_total_cents")
-  amountPaidCents      BigInt        @default(0) @map("amount_paid_cents")
-  balanceDueCents      BigInt        @default(0) @map("balance_due_cents")
-  totalProfitCents     BigInt        @default(0) @map("total_profit_cents")
-  currency             String        @default("INR") @db.Char(3)
-  notes                String?
-  createdByUserId      String?       @map("created_by_user_id") @db.Uuid
-  createdAt            DateTime      @default(now()) @map("created_at")
-  updatedAt            DateTime      @updatedAt @map("updated_at")
+  id                      String        @id @default(uuid()) @db.Uuid
+  organizationId          String        @map("organization_id") @db.Uuid
+  customerId              String?       @map("customer_id") @db.Uuid
+  invoiceNumber           String?       @map("invoice_number")
+  status                  InvoiceStatus @default(draft)
+  invoiceDate             DateTime?     @map("invoice_date") @db.Date
+  dueDate                 DateTime?     @map("due_date") @db.Date
+  issuedAt                DateTime?     @map("issued_at")
+  subtotalCents           BigInt        @default(0) @map("subtotal_cents")
+  grandTotalCents         BigInt        @default(0) @map("grand_total_cents")
+  amountPaidCents         BigInt        @default(0) @map("amount_paid_cents")
+  balanceDueCents         BigInt        @default(0) @map("balance_due_cents")
+  totalProfitCents        BigInt        @default(0) @map("total_profit_cents")
+  currency                String        @default("INR") @db.Char(3)
+  notes                   String?
+  duplicatedFromInvoiceId String?       @map("duplicated_from_invoice_id") @db.Uuid
+  duplicatedAt            DateTime?     @map("duplicated_at")
+  createdByUserId         String?       @map("created_by_user_id") @db.Uuid
+  issuedByUserId          String?       @map("issued_by_user_id") @db.Uuid
+  cancelledAt             DateTime?     @map("cancelled_at")
+  cancelledByUserId       String?       @map("cancelled_by_user_id") @db.Uuid
+  cancellationReason      String?       @map("cancellation_reason")
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer     Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  lines        InvoiceLine[]
-  allocations  PaymentAllocation[]
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  duplicatedFrom Invoice?            @relation("InvoiceDuplicates", fields: [duplicatedFromInvoiceId], references: [id], onDelete: SetNull)
+  duplicates     Invoice[]           @relation("InvoiceDuplicates")
+  lines          InvoiceLine[]
+  allocations    PaymentAllocation[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, customerId])
   @@index([organizationId, status])
+  @@index([organizationId, invoiceDate(sort: Desc)])
   @@map("invoices")
 }
 
