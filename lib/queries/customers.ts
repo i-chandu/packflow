@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCustomerOutstandingCents } from "@/lib/ledger/customer-balance";
+import { getCustomerOutstandingBatch } from "@/lib/ledger/running-balance";
 import { getPagination, paginationMeta } from "@/lib/pagination";
 import type { Prisma } from "@prisma/client";
 
@@ -34,15 +35,17 @@ export async function listCustomers(params: {
     prisma.customer.count({ where }),
   ]);
 
-  const withOutstanding = await Promise.all(
-    items.map(async (c) => ({
-      ...c,
-      outstandingCents: await getCustomerOutstandingCents(
-        params.organizationId,
-        c.id,
-      ),
-    })),
+  const outstandingMap = await getCustomerOutstandingBatch(
+    params.organizationId,
+    items.map((c) => c.id),
   );
+  const withOutstanding = items.map((c) => {
+    const raw = outstandingMap.get(c.id) ?? BigInt(0);
+    return {
+      ...c,
+      outstandingCents: raw > BigInt(0) ? raw : BigInt(0),
+    };
+  });
 
   return {
     items: withOutstanding,

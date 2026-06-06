@@ -226,6 +226,19 @@ model Organization {
   defaultCurrency String   @default("INR") @map("default_currency") @db.Char(3)
   timezone        String   @default("Asia/Kolkata")
   logoUrl         String?  @map("logo_url")
+  addressLine1    String?  @map("address_line1")
+  addressLine2    String?  @map("address_line2")
+  city            String?
+  state           String?
+  postalCode      String?  @map("postal_code")
+  phone           String?
+  email           String?
+  upiId           String?  @map("upi_id")
+  bankName        String?  @map("bank_name")
+  bankAccountName String?  @map("bank_account_name")
+  bankAccountNo   String?  @map("bank_account_no")
+  bankIfsc        String?  @map("bank_ifsc")
+  invoiceTerms    String?  @map("invoice_terms")
   gstin           String?
   plan            String   @default("trial")
   createdAt       DateTime @default(now()) @map("created_at")

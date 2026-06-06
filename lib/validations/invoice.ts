@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 export const invoiceLineSchema = z.object({
-  lineType: z.enum(["product", "transport", "loading_unloading", "custom"]),
+  lineType: z.enum([
+    "product",
+    "transport",
+    "loading_unloading",
+    "custom",
+    "opening_balance",
+  ]),
   productId: z.string().uuid().optional().or(z.literal("")),
   description: z.string().min(1, "Description is required").max(500),
   quantity: z.coerce.number().positive("Quantity must be positive"),

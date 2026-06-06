@@ -14,7 +14,7 @@ import {
   issueInvoiceRecord,
   updateDraftInvoiceWithLines,
 } from "@/lib/invoices/invoice-service";
-import { deriveInvoiceStatusFromPayments } from "@/lib/invoices/payment-status";
+import { nextCustomerRunningBalanceCents } from "@/lib/ledger/running-balance";
 import { formDataToInvoiceInput } from "@/lib/validations/invoice";
 
 export type InvoiceFormState = {
@@ -339,15 +339,44 @@ export async function cancelInvoice(
     }
     if (!reason.trim()) return actionError("Cancellation reason is required");
 
-    const invoice = await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        status: "cancelled",
-        cancelledAt: new Date(),
-        cancelledByUserId: userId,
-        cancellationReason: reason.trim(),
-        balanceDueCents: BigInt(0),
-      },
+    const invoice = await prisma.$transaction(async (tx) => {
+      const updated = await tx.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledByUserId: userId,
+          cancellationReason: reason.trim(),
+          balanceDueCents: BigInt(0),
+        },
+      });
+
+      if (existing.customerId && existing.grandTotalCents > BigInt(0)) {
+        const runningBalance = await nextCustomerRunningBalanceCents(
+          organizationId,
+          existing.customerId,
+          BigInt(0),
+          existing.grandTotalCents,
+          tx,
+        );
+        await tx.ledgerEntry.create({
+          data: {
+            organizationId,
+            entryDate: new Date(),
+            entryType: "adjustment",
+            customerId: existing.customerId,
+            debitCents: BigInt(0),
+            creditCents: existing.grandTotalCents,
+            referenceLabel: existing.invoiceNumber,
+            memo: `Cancelled invoice ${existing.invoiceNumber ?? invoiceId}`,
+            sourceType: "invoice",
+            sourceId: invoiceId,
+            runningBalanceCents: runningBalance,
+          },
+        });
+      }
+
+      return updated;
     });
 
     await logAudit({
@@ -490,35 +519,28 @@ export async function quickCreateProduct(
   }
 }
 
-/** Recompute status from payment allocations (for payment module integration). */
-export async function syncInvoicePaymentStatus(
-  organizationId: string,
-  invoiceId: string,
-) {
-  const invoice = await prisma.invoice.findFirst({
-    where: { id: invoiceId, organizationId },
-  });
-  if (!invoice || invoice.status === "draft" || invoice.status === "cancelled") {
-    return;
+export async function getCustomerOutstandingForBuilder(
+  orgSlug: string,
+  customerId: string,
+): Promise<ActionResult<{ rupees: number }>> {
+  try {
+    const { ctx } = await requireOrgAction(orgSlug);
+    const { getCustomerOutstandingCents } = await import(
+      "@/lib/ledger/customer-balance"
+    );
+    const { centsToRupees } = await import("@/lib/money");
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, organizationId: ctx.organization.id },
+    });
+    if (!customer) return actionError("Client not found");
+
+    const cents = await getCustomerOutstandingCents(
+      ctx.organization.id,
+      customerId,
+    );
+    return { success: true, data: { rupees: centsToRupees(cents) } };
+  } catch {
+    return actionError("Failed to load outstanding balance");
   }
-
-  const allocSum = await prisma.paymentAllocation.aggregate({
-    where: { invoiceId },
-    _sum: { amountCents: true },
-  });
-  const amountPaidCents = allocSum._sum.amountCents ?? BigInt(0);
-  const status = deriveInvoiceStatusFromPayments({
-    currentStatus: invoice.status,
-    grandTotalCents: invoice.grandTotalCents,
-    amountPaidCents,
-  });
-  const balanceDueCents =
-    invoice.grandTotalCents > amountPaidCents
-      ? invoice.grandTotalCents - amountPaidCents
-      : BigInt(0);
-
-  await prisma.invoice.update({
-    where: { id: invoiceId },
-    data: { amountPaidCents, balanceDueCents, status },
-  });
 }

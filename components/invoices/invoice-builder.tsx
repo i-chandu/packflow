@@ -3,7 +3,11 @@
 import { useMemo, useState, useActionState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { InvoiceFormState } from "@/app/actions/invoices";
-import { quickCreateClient, quickCreateProduct } from "@/app/actions/invoices";
+import {
+  getCustomerOutstandingForBuilder,
+  quickCreateClient,
+  quickCreateProduct,
+} from "@/app/actions/invoices";
 import { ErrorAlert } from "@/components/shared/error-alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +54,7 @@ const BUILDER_LINE_TYPES = [
   "transport",
   "loading_unloading",
   "custom",
+  "opening_balance",
 ] as const;
 
 function linesFromInvoice(lines: InvoiceLine[]): InvoiceLineInput[] {
@@ -107,6 +112,9 @@ export function InvoiceBuilder({
     invoice?.dueDate ? new Date(invoice.dueDate).toISOString().slice(0, 10) : "",
   );
   const [notes, setNotes] = useState(invoice?.notes ?? "");
+  const [openingBalanceLoading, setOpeningBalanceLoading] = useState(false);
+
+  const hasOpeningBalanceLine = lines.some((l) => l.lineType === "opening_balance");
 
   const [saveState, saveFormAction, savePending] = useActionState(saveAction, {});
   const [issueState, issueFormAction, issuePending] = useActionState(issueAction, {});
@@ -143,6 +151,31 @@ export function InvoiceBuilder({
       },
     ]);
     setSelectedProductId("");
+  }
+
+  async function toggleOpeningBalance() {
+    if (hasOpeningBalanceLine) {
+      setLines((prev) => prev.filter((l) => l.lineType !== "opening_balance"));
+      return;
+    }
+    if (!customerId) return;
+    setOpeningBalanceLoading(true);
+    const result = await getCustomerOutstandingForBuilder(orgSlug, customerId);
+    setOpeningBalanceLoading(false);
+    if (!result.success || !result.data) return;
+    const outstandingRupees = result.data.rupees;
+    if (outstandingRupees <= 0) return;
+    setLines((prev) => [
+      ...prev.filter((l) => l.lineType !== "opening_balance"),
+      {
+        lineType: "opening_balance",
+        productId: "",
+        description: "Opening balance / prior outstanding",
+        quantity: 1,
+        rate: outstandingRupees,
+        customChargeLabel: "",
+      },
+    ]);
   }
 
   function addChargeLine(type: "transport" | "loading_unloading" | "custom") {
@@ -221,6 +254,21 @@ export function InvoiceBuilder({
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
             />
+          </div>
+          <div className="flex items-end sm:col-span-2">
+            <Button
+              type="button"
+              variant={hasOpeningBalanceLine ? "default" : "outline"}
+              size="sm"
+              disabled={!customerId || openingBalanceLoading}
+              onClick={toggleOpeningBalance}
+            >
+              {openingBalanceLoading
+                ? "Loading…"
+                : hasOpeningBalanceLine
+                  ? "Remove opening balance"
+                  : "Include opening balance"}
+            </Button>
           </div>
         </section>
 
@@ -307,22 +355,25 @@ export function InvoiceBuilder({
                     <Input
                       value={line.description}
                       onChange={(e) => updateLine(index, { description: e.target.value })}
+                      readOnly={line.lineType === "opening_balance"}
                     />
                   </div>
+                  {line.lineType !== "opening_balance" && (
+                    <div className="space-y-1">
+                      <Label>Qty</Label>
+                      <Input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={line.quantity}
+                        onChange={(e) =>
+                          updateLine(index, { quantity: parseFloat(e.target.value) || 0 })
+                        }
+                      />
+                    </div>
+                  )}
                   <div className="space-y-1">
-                    <Label>Qty</Label>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={line.quantity}
-                      onChange={(e) =>
-                        updateLine(index, { quantity: parseFloat(e.target.value) || 0 })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Rate (₹)</Label>
+                    <Label>{line.lineType === "opening_balance" ? "Amount (₹)" : "Rate (₹)"}</Label>
                     <Input
                       type="number"
                       min="0"
@@ -331,6 +382,7 @@ export function InvoiceBuilder({
                       onChange={(e) =>
                         updateLine(index, { rate: parseFloat(e.target.value) || 0 })
                       }
+                      readOnly={line.lineType === "opening_balance"}
                     />
                   </div>
                 </div>

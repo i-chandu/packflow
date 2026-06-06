@@ -21,7 +21,10 @@ export function calculateLineTotals(
 ): LineTotals {
   const sellingRateCents = rupeesToCents(line.rate);
   const qty = line.quantity;
-  const lineAmountCents = BigInt(Math.round(qty * Number(sellingRateCents)));
+  const lineAmountCents =
+    line.lineType === "opening_balance"
+      ? sellingRateCents
+      : BigInt(Math.round(qty * Number(sellingRateCents)));
   const unitProfit = sellingRateCents - purchaseRateCents;
   const lineProfitCents =
     line.lineType === "product"

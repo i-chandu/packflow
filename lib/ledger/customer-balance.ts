@@ -1,21 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import type { InvoiceStatus } from "@prisma/client";
-
-const OUTSTANDING_STATUSES: InvoiceStatus[] = ["issued", "partially_paid"];
+import { getCustomerLedgerBalanceCents } from "@/lib/ledger/running-balance";
 
 export async function getCustomerOutstandingCents(
   organizationId: string,
   customerId: string,
 ): Promise<bigint> {
-  const result = await prisma.invoice.aggregate({
-    where: {
-      organizationId,
-      customerId,
-      status: { in: OUTSTANDING_STATUSES },
-    },
-    _sum: { balanceDueCents: true },
-  });
-  return result._sum.balanceDueCents ?? BigInt(0);
+  const balance = await getCustomerLedgerBalanceCents(organizationId, customerId);
+  return balance > BigInt(0) ? balance : BigInt(0);
 }
 
 export async function getSupplierPayableCents(
@@ -26,6 +17,7 @@ export async function getSupplierPayableCents(
     where: {
       organizationId,
       supplierId,
+      status: { in: ["open", "partially_paid"] },
       balanceDueCents: { gt: 0 },
     },
     _sum: { balanceDueCents: true },

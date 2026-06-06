@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireWriteAction } from "@/lib/actions/action-context";
 import { actionError } from "@/lib/actions/action-result";
 import { logAudit } from "@/lib/audit";
+import { nextCustomerRunningBalanceCents } from "@/lib/ledger/running-balance";
 import { rupeesToCents } from "@/lib/money";
 import { customerFormSchema } from "@/lib/validations/customer";
 import type { CustomerFormInput } from "@/lib/validations/customer";
@@ -90,11 +91,18 @@ export async function createCustomer(orgSlug: string, formData: FormData) {
       });
 
       if (openingCents > BigInt(0)) {
+        const runningBalance = await nextCustomerRunningBalanceCents(
+          organizationId,
+          created.id,
+          openingCents,
+          BigInt(0),
+          tx,
+        );
         await tx.ledgerEntry.create({
           data: {
             organizationId,
             entryDate: new Date(),
-            entryType: "adjustment",
+            entryType: "opening_balance",
             customerId: created.id,
             debitCents: openingCents,
             creditCents: BigInt(0),
@@ -102,7 +110,7 @@ export async function createCustomer(orgSlug: string, formData: FormData) {
             memo: "Opening balance on client creation",
             sourceType: "manual_adjustment",
             sourceId: created.id,
-            runningBalanceCents: openingCents,
+            runningBalanceCents: runningBalance,
           },
         });
       }

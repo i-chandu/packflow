@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { InvoiceLineInput } from "@/lib/validations/invoice";
 import { calculateInvoiceTotals } from "@/lib/invoices/calculate-totals";
 import { allocateInvoiceNumber } from "@/lib/invoices/invoice-number";
+import { nextCustomerRunningBalanceCents } from "@/lib/ledger/running-balance";
 import { prisma } from "@/lib/prisma";
 
 type ProductSnapshot = {
@@ -72,6 +73,13 @@ function buildLineCreateData(
     lineProfitCents: totals.lineProfitCents,
     customChargeLabel:
       line.lineType === "custom" ? line.customChargeLabel || line.description : null,
+    ...(line.lineType === "opening_balance"
+      ? {
+          quantity: new Prisma.Decimal(1),
+          purchaseRateCents: BigInt(0),
+          sellingRateCents: totals.sellingRateCents,
+        }
+      : {}),
   };
 }
 
@@ -228,6 +236,43 @@ export async function issueInvoiceRecord(params: {
       ),
     });
 
+    const openingBalanceCents = totals.lineTotals
+      .filter((_, i) => params.lines[i]?.lineType === "opening_balance")
+      .reduce((sum, lt) => sum + lt.lineAmountCents, BigInt(0));
+
+    if (openingBalanceCents > BigInt(0)) {
+      const afterCarryForward = await nextCustomerRunningBalanceCents(
+        params.organizationId,
+        params.customerId,
+        BigInt(0),
+        openingBalanceCents,
+        tx,
+      );
+      await tx.ledgerEntry.create({
+        data: {
+          organizationId: params.organizationId,
+          entryDate: params.invoiceDate,
+          entryType: "adjustment",
+          customerId: params.customerId,
+          debitCents: BigInt(0),
+          creditCents: openingBalanceCents,
+          referenceLabel: invoiceNumber,
+          memo: `Opening balance carried forward to ${invoiceNumber}`,
+          sourceType: "invoice",
+          sourceId: params.invoiceId,
+          runningBalanceCents: afterCarryForward,
+        },
+      });
+    }
+
+    const runningBalance = await nextCustomerRunningBalanceCents(
+      params.organizationId,
+      params.customerId,
+      totals.grandTotalCents,
+      BigInt(0),
+      tx,
+    );
+
     await tx.ledgerEntry.create({
       data: {
         organizationId: params.organizationId,
@@ -240,7 +285,7 @@ export async function issueInvoiceRecord(params: {
         memo: `Invoice ${invoiceNumber}`,
         sourceType: "invoice",
         sourceId: params.invoiceId,
-        runningBalanceCents: totals.grandTotalCents,
+        runningBalanceCents: runningBalance,
       },
     });
 

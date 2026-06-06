@@ -1,24 +1,64 @@
 import { formatINR, centsToRupees } from "@/lib/money";
 import type { Customer, Invoice, InvoiceLine, Organization } from "@prisma/client";
 
+type OrgPdfFields = Pick<
+  Organization,
+  | "name"
+  | "legalName"
+  | "gstin"
+  | "logoUrl"
+  | "addressLine1"
+  | "addressLine2"
+  | "city"
+  | "state"
+  | "postalCode"
+  | "phone"
+  | "email"
+  | "upiId"
+  | "bankName"
+  | "bankAccountName"
+  | "bankAccountNo"
+  | "bankIfsc"
+  | "invoiceTerms"
+>;
+
 type InvoiceWithRelations = Invoice & {
   customer: Customer | null;
   lines: InvoiceLine[];
-  organization: Pick<Organization, "name" | "legalName" | "gstin" | "logoUrl">;
+  organization: OrgPdfFields;
 };
 
 export function InvoicePdfDocument({ invoice }: { invoice: InvoiceWithRelations }) {
-  const companyName = invoice.organization.legalName || invoice.organization.name;
+  const org = invoice.organization;
+  const companyName = org.legalName || org.name;
   const customer = invoice.customer;
+  const addressLine = [org.addressLine1, org.addressLine2].filter(Boolean).join(", ");
+  const cityLine = [org.city, org.state, org.postalCode].filter(Boolean).join(", ");
+  const hasBankDetails =
+    org.bankName || org.bankAccountNo || org.bankIfsc || org.bankAccountName;
 
   return (
     <div className="mx-auto max-w-3xl bg-white p-8 text-zinc-900 print:p-0">
       <div className="mb-8 flex items-start justify-between border-b border-zinc-300 pb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{companyName}</h1>
-          {invoice.organization.gstin && (
-            <p className="mt-1 text-sm text-zinc-600">GSTIN: {invoice.organization.gstin}</p>
+        <div className="flex gap-4">
+          {org.logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={org.logoUrl}
+              alt={`${companyName} logo`}
+              className="h-16 w-auto max-w-[120px] object-contain"
+            />
           )}
+          <div>
+            <h1 className="text-2xl font-bold">{companyName}</h1>
+            {addressLine && <p className="mt-1 text-sm text-zinc-600">{addressLine}</p>}
+            {cityLine && <p className="text-sm text-zinc-600">{cityLine}</p>}
+            {org.phone && <p className="text-sm text-zinc-600">Phone: {org.phone}</p>}
+            {org.email && <p className="text-sm text-zinc-600">{org.email}</p>}
+            {org.gstin && (
+              <p className="mt-1 text-sm text-zinc-600">GSTIN: {org.gstin}</p>
+            )}
+          </div>
         </div>
         <div className="text-right">
           <p className="text-lg font-semibold">TAX INVOICE</p>
@@ -69,6 +109,9 @@ export function InvoicePdfDocument({ invoice }: { invoice: InvoiceWithRelations 
               <td className="py-2">{i + 1}</td>
               <td className="py-2">
                 {line.description}
+                {line.lineType === "opening_balance" && (
+                  <span className="block text-xs text-zinc-500">Opening balance</span>
+                )}
                 {line.boxName && line.lengthMm && (
                   <span className="block text-xs text-zinc-500">
                     {line.boxName} · {Number(line.lengthMm)}×{Number(line.widthMm)}×
@@ -107,10 +150,28 @@ export function InvoicePdfDocument({ invoice }: { invoice: InvoiceWithRelations 
         )}
       </div>
 
+      {(hasBankDetails || org.upiId) && (
+        <div className="mt-8 border-t border-zinc-200 pt-4 text-sm">
+          <p className="text-xs font-medium uppercase text-zinc-500">Payment details</p>
+          {org.upiId && <p className="mt-1">UPI: {org.upiId}</p>}
+          {org.bankName && <p>Bank: {org.bankName}</p>}
+          {org.bankAccountName && <p>A/C name: {org.bankAccountName}</p>}
+          {org.bankAccountNo && <p>A/C no: {org.bankAccountNo}</p>}
+          {org.bankIfsc && <p>IFSC: {org.bankIfsc}</p>}
+        </div>
+      )}
+
       {invoice.notes && (
         <div className="mt-8 border-t border-zinc-200 pt-4">
           <p className="text-xs font-medium uppercase text-zinc-500">Notes</p>
           <p className="mt-1 text-sm whitespace-pre-wrap">{invoice.notes}</p>
+        </div>
+      )}
+
+      {org.invoiceTerms && (
+        <div className="mt-6 border-t border-zinc-200 pt-4">
+          <p className="text-xs font-medium uppercase text-zinc-500">Terms</p>
+          <p className="mt-1 text-sm whitespace-pre-wrap">{org.invoiceTerms}</p>
         </div>
       )}
 

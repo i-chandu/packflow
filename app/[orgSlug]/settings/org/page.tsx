@@ -1,7 +1,8 @@
-import { getOrganizationContext } from "@/lib/org/get-organization-context";
 import { auth } from "@/auth";
+import { updateOrganization } from "@/app/actions/organization";
+import { OrgSettingsForm } from "@/components/settings/org-form";
+import { getOrganizationContext } from "@/lib/org/get-organization-context";
 import { canManageOrg } from "@/lib/org/permissions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function OrgSettingsPage({
   params,
@@ -16,31 +17,25 @@ export default async function OrgSettingsPage({
   if (!ctx) return null;
 
   const canEdit = canManageOrg(ctx.membership.role);
+  const boundAction = updateOrganization.bind(null, orgSlug);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Organization</h1>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{ctx.organization.name}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            <span className="text-zinc-500">Workspace URL:</span> /{ctx.organization.slug}
-          </p>
-          <p>
-            <span className="text-zinc-500">Invoice prefix:</span>{" "}
-            {ctx.organization.invoicePrefix}
-          </p>
-          <p>
-            <span className="text-zinc-500">Your role:</span>{" "}
-            <span className="capitalize">{ctx.membership.role}</span>
-          </p>
-          {!canEdit && (
-            <p className="text-zinc-500">Contact an admin to change organization settings.</p>
-          )}
-        </CardContent>
-      </Card>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Organization</h1>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Workspace URL: /{ctx.organization.slug} · Role:{" "}
+          <span className="capitalize">{ctx.membership.role}</span>
+        </p>
+      </div>
+
+      {canEdit ? (
+        <OrgSettingsForm organization={ctx.organization} action={boundAction} />
+      ) : (
+        <p className="text-sm text-zinc-500">
+          Contact an admin to change organization settings.
+        </p>
+      )}
     </div>
   );
 }
